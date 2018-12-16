@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package cctv;
+
+message Channels {
+    int32 mask = 1;
+}
+
+message Frame {
+    int32 channel = 1;
+    int64 ts = 2;
+    bytes image = 5;
+}
+
+service CCTV {
+    rpc Feeds (Channels) returns (stream Frame) {
+    }
+}
