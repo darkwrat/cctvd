@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"google.golang.org/grpc"
 	"log"
 	"net"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/darkwrat/cctvd/cctv"
 	"github.com/darkwrat/cctvd/dvr"
@@ -40,9 +41,9 @@ func (s *server) unsubscribe(mask int32, sub chan *cctv.Frame) {
 	s.Lock()
 	defer s.Unlock()
 
-	for ch := uint8(0); ch < 32; ch++ {
-		if v := mask & (1 << ch); v != 0 {
-			if c, ok := s.m[ch]; ok {
+	for feed := uint8(0); feed < 32; feed++ {
+		if v := mask & (1 << feed); v != 0 {
+			if c, ok := s.m[feed]; ok {
 				delete(c, sub)
 			}
 		}
@@ -53,8 +54,6 @@ func (s *server) send(frame *cctv.Frame) {
 	s.RLock()
 	defer s.RUnlock()
 
-	// todo fine grained lock
-	// todo handle client drop
 	ch := uint8(frame.GetChannel())
 	if c, ok := s.m[ch]; ok {
 		for sub := range c {
@@ -96,24 +95,26 @@ func (s *server) multicast(ch chan *dvr.Frame) {
 	}
 }
 
-var (
-	addr  = flag.String("addr", "127.0.0.1:7620", "dvr host:port")
-	delay = flag.Duration("delay", 5*time.Second, "delay before relive after failure")
-)
-
 func live(opts dvr.ConnectOpts, ch chan *dvr.Frame) error {
 	c, err := dvr.Connect(opts)
 	if err != nil {
-		return fmt.Errorf("cannot connect to dvr: %s", err)
+		return fmt.Errorf("could not connect to dvr: %s", err)
 	}
 	defer c.Close()
 
 	if err := c.Live(ch); err != nil {
-		return fmt.Errorf("cannot stream anymore: %s", err)
+		return fmt.Errorf("could not continue stream: %s", err)
 	}
 
 	return nil
 }
+
+var (
+	addr  = flag.String("addr", "127.0.0.1:7620", "dvr host:port")
+	user  = flag.String("user", "ADMIN", "dvr username")
+	pass  = flag.String("pass", "0000", "dvr password")
+	delay = flag.Duration("delay", 5*time.Second, "dvr reconnect delay after failure")
+)
 
 func main() {
 	flag.Parse()
@@ -131,14 +132,14 @@ func main() {
 	go csrv.multicast(ch)
 	go func() {
 		if err := s.Serve(lis); err != nil {
-			log.Fatalf("cannot serve grpc: %s", err)
+			log.Fatalf("could not serve grpc: %s", err)
 		}
 	}()
 
 	opts := dvr.ConnectOpts{
-		Addr:     *addr,
-		User:     "ADMIN",
-		Password: "0000",
+		Addr: *addr,
+		User: *user,
+		Pass: *pass,
 	}
 
 	for {

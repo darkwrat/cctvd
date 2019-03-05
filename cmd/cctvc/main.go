@@ -3,19 +3,48 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/mattn/go-mjpeg"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/mattn/go-mjpeg"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/darkwrat/cctvd/cctv"
 )
 
 var (
-	addr = flag.String("addr", "127.0.0.1:50051", "cctvd host:port")
+	addr  = flag.String("addr", "127.0.0.1:50051", "cctvd host:port")
+	delay = flag.Duration("delay", 1*time.Second, "cctvd reconnect delay after failure")
 )
+
+func live(m map[int32]*mjpeg.Stream) error {
+	conn, err := grpc.Dial(*addr, grpc.WithInsecure())
+	if err != nil {
+		return fmt.Errorf("could not connect: %s", err)
+	}
+	defer conn.Close()
+
+	c := cctv.NewCCTVClient(conn)
+	feeds, err := c.Feeds(context.Background(), &cctv.Channels{Mask: 0xffff})
+	if err != nil {
+		return fmt.Errorf("could not subscribe: %s", err)
+	}
+
+	for {
+		frame, err := feeds.Recv()
+		if err != nil {
+			return fmt.Errorf("could not receive frame: %s", err)
+		}
+
+		if frame.Channel < 32 {
+			if err := m[frame.Channel].Update(frame.Image); err != nil {
+				return fmt.Errorf("could not update frame for channel `%d': %s", frame.Channel, err)
+			}
+		}
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -31,41 +60,12 @@ func main() {
 		log.Fatal(http.ListenAndServe(":8000", nil))
 	}()
 
-outer:
 	for {
-		conn, err := grpc.Dial(*addr, grpc.WithInsecure())
-		if err != nil {
-			log.Printf("could not connect: %s", err)
-			time.Sleep(1 * time.Second)
-			continue outer
+		if err := live(m); err != nil {
+			log.Print(err)
 		}
 
-		c := cctv.NewCCTVClient(conn)
-		feeds, err := c.Feeds(context.Background(), &cctv.Channels{Mask: 0xffff})
-		if err != nil {
-			log.Printf("could not subscribe: %s", err)
-			_ = conn.Close()
-			time.Sleep(1 * time.Second)
-			continue outer
-		}
-
-		for {
-			frame, err := feeds.Recv()
-			if err != nil {
-				log.Printf("could not receive frame: %s", err)
-				_ = conn.Close()
-				time.Sleep(1 * time.Second)
-				continue outer
-			}
-
-			if frame.Channel < 32 {
-				if err := m[frame.Channel].Update(frame.Image); err != nil {
-					log.Printf("could not update frame for channel `%d': %s", frame.Channel, err)
-					_ = conn.Close()
-					time.Sleep(1 * time.Second)
-					continue outer
-				}
-			}
-		}
+		log.Printf("sleeping for %v seconds before retry", delay.Seconds())
+		time.Sleep(*delay)
 	}
 }

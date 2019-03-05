@@ -247,7 +247,7 @@ type Client struct {
 }
 
 type ConnectOpts struct {
-	Addr, User, Password string
+	Addr, User, Pass string
 }
 
 func Connect(opts ConnectOpts) (*Client, error) {
@@ -256,7 +256,7 @@ func Connect(opts ConnectOpts) (*Client, error) {
 		return nil, fmt.Errorf("could not dial: %s", err)
 	}
 
-	if err := doAuth(conn, opts.User, opts.Password); err != nil {
+	if err := doAuth(conn, opts.User, opts.Pass); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("auth failed: %s", err)
 	}
