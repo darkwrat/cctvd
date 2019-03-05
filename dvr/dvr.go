@@ -3,6 +3,7 @@ package dvr
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,10 @@ import (
 
 const (
 	packetHeaderMagic = uint16(0x2818)
+)
+
+var (
+	errMagicMismatch = errors.New("magic mismatch")
 )
 
 type command uint16
@@ -42,12 +47,12 @@ type packetHeader struct {
 func readPacketHeader(r io.Reader) (*packetHeader, error) {
 	buf := make([]byte, 6)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		return nil, fmt.Errorf("could not read packet header: %s", err)
+		return nil, err
 	}
 
 	magic := binary.BigEndian.Uint16(buf[:2])
 	if magic != packetHeaderMagic {
-		return nil, fmt.Errorf("magic mismatch: `%d' != `%d'", magic, packetHeaderMagic)
+		return nil, errMagicMismatch
 	}
 
 	header := &packetHeader{
@@ -59,11 +64,8 @@ func readPacketHeader(r io.Reader) (*packetHeader, error) {
 }
 
 func readPacketBody(r io.Reader, body []byte) error {
-	if _, err := io.ReadFull(r, body); err != nil {
-		return fmt.Errorf("could not read packet body: %s", err)
-	}
-
-	return nil
+	_, err := io.ReadFull(r, body)
+	return err
 }
 
 type packet struct {
@@ -365,9 +367,13 @@ func (c *Client) Live(ch chan *Frame) error {
 
 	for {
 		pkt, err := readPacket(c.conn)
-		if err != nil {
-			log.Printf("could not read packet: %s", err)
+		if err == errMagicMismatch {
+			log.Printf("skipping packet: %s", err)
 			continue
+		}
+
+		if err != nil {
+			return fmt.Errorf("could not read packet: %s", err)
 		}
 
 		select {

@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"google.golang.org/grpc"
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/darkwrat/cctvd/cctv"
 	"github.com/darkwrat/cctvd/dvr"
@@ -95,19 +97,43 @@ func (s *server) multicast(ch chan *dvr.Frame) {
 }
 
 var (
-	addr = flag.String("addr", "127.0.0.1:7620", "dvr host:port")
+	addr  = flag.String("addr", "127.0.0.1:7620", "dvr host:port")
+	delay = flag.Duration("delay", 5*time.Second, "delay before relive after failure")
 )
+
+func live(opts dvr.ConnectOpts, ch chan *dvr.Frame) error {
+	c, err := dvr.Connect(opts)
+	if err != nil {
+		return fmt.Errorf("cannot connect to dvr: %s", err)
+	}
+	defer c.Close()
+
+	if err := c.Live(ch); err != nil {
+		return fmt.Errorf("cannot stream anymore: %s", err)
+	}
+
+	return nil
+}
 
 func main() {
 	flag.Parse()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("failed to listen: %s", err)
 	}
+
 	s := grpc.NewServer()
 	csrv := &server{m: make(map[uint8]cs)}
 	cctv.RegisterCCTVServer(s, csrv)
+
+	ch := make(chan *dvr.Frame, 100)
+	go csrv.multicast(ch)
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("cannot serve grpc: %s", err)
+		}
+	}()
 
 	opts := dvr.ConnectOpts{
 		Addr:     *addr,
@@ -115,19 +141,12 @@ func main() {
 		Password: "0000",
 	}
 
-	c, err := dvr.Connect(opts)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
+	for {
+		if err := live(opts, ch); err != nil {
+			log.Print(err)
+		}
 
-	ch := make(chan *dvr.Frame, 100)
-	go csrv.multicast(ch)
-	go func() {
-		log.Fatal(c.Live(ch))
-	}()
-
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Printf("sleeping for %v seconds before retry", delay.Seconds())
+		time.Sleep(*delay)
 	}
 }
