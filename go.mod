@@ -4,7 +4,7 @@ require (
 	cloud.google.com/go v0.34.0 // indirect
 	github.com/golang/mock v1.2.0 // indirect
 	github.com/golang/protobuf v1.2.0
-	github.com/mattn/go-mjpeg v0.0.0-20180621123927-a9cedbfd1cd8 // indirect
+	github.com/mattn/go-mjpeg v0.0.0-20180621123927-a9cedbfd1cd8
 	golang.org/x/image v0.0.0-20181116024801-cd38e8056d9b // indirect
 	golang.org/x/lint v0.0.0-20181212231659-93c0bb5c8393 // indirect
 	golang.org/x/net v0.0.0-20181213202711-891ebc4b82d6
