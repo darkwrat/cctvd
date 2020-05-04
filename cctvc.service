@@ -1,0 +1,12 @@
+[Unit]
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+Type=simple
+Restart=on-failure
+ExecStart=/root/cctvd/bin/cctvc -addr=127.0.0.1:50051
+
+[Install]
+WantedBy=multi-user.target
+

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -110,6 +111,7 @@ func live(opts dvr.ConnectOpts, ch chan *dvr.Frame) error {
 }
 
 var (
+	maxprocs = flag.Int("maxprocs", 1, "gomaxprocs value")
 	addr  = flag.String("addr", "127.0.0.1:7620", "dvr host:port")
 	user  = flag.String("user", "ADMIN", "dvr username")
 	pass  = flag.String("pass", "0000", "dvr password")
@@ -118,8 +120,9 @@ var (
 
 func main() {
 	flag.Parse()
+	runtime.GOMAXPROCS(*maxprocs)
 
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", "127.0.0.1:50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %s", err)
 	}
@@ -142,12 +145,7 @@ func main() {
 		Pass: *pass,
 	}
 
-	for {
-		if err := live(opts, ch); err != nil {
-			log.Print(err)
-		}
-
-		log.Printf("sleeping for %v seconds before retry", delay.Seconds())
-		time.Sleep(*delay)
+	if err := live(opts, ch); err != nil {
+		log.Fatal(err)
 	}
 }

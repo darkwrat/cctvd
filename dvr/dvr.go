@@ -2,6 +2,7 @@ package dvr
 
 import (
 	"bytes"
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -365,8 +366,10 @@ func (c *Client) Live(ch chan *Frame) error {
 	ping := time.NewTicker(10 * time.Second)
 	defer ping.Stop()
 
+	bio := bufio.NewReaderSize(c.conn, 1048576)
+
 	for {
-		pkt, err := readPacket(c.conn)
+		pkt, err := readPacket(bio)
 		if err == errMagicMismatch {
 			log.Printf("skipping packet: %s", err)
 			continue

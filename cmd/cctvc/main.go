@@ -57,7 +57,7 @@ func main() {
 	}
 
 	go func() {
-		log.Fatal(http.ListenAndServe(":8000", nil))
+		log.Fatal(http.ListenAndServe("127.0.0.1:8000", nil))
 	}()
 
 	for {
